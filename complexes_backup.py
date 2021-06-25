@@ -3,18 +3,20 @@
 """
 Created on Fri Dec 11 20:11:42 2020
 
-@author: Soukaina Timouma
+@author: sookie
 """
 
 
 #%%
 import os
 import re
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
+
 #%%
 
 os.chdir("/home/sookie/Documents/RNAseq_analysis/9_Young_paralogs")
+
 
 #%%
 os.getcwd()
@@ -51,13 +53,16 @@ os.getcwd()
 
 #%%absolute expression
 
-
+alleles_comp = []
 dico_comp_expr = {}
 with open("results/Table_complexes_in_cbs1513_FINAL.csv","r") as exp:
     next(exp)
     for line in exp:
         line = line.split("\n")[0]
         line = line.split(",")
+#        print(line)
+        alleles_comp.append(line[3])
+        alleles_comp.append(line[4])
         
         if line[0] not in dico_comp_expr.keys():
             x=0
@@ -67,13 +72,61 @@ with open("results/Table_complexes_in_cbs1513_FINAL.csv","r") as exp:
             dico_comp_expr[line[0]][x] = line
 #        print(line)
         
-# 
+#%%
+toremove = []            
+for comp in dico_comp_expr.keys():
+       if len(dico_comp_expr[comp].values())>3:
+              for i in range(len(dico_comp_expr[comp].values())):
+                     if dico_comp_expr[comp][i][3] != "NA":
+                            toremove.append(dico_comp_expr[comp][i][3])
+                     if dico_comp_expr[comp][i][4] != "NA":
+                            toremove.append(dico_comp_expr[comp][i][4])
+#                     print(dico_comp_expr[comp][i][3])
+#                     print(dico_comp_expr[comp][i][4])
+
 #    
 #%%
-#print(dico_comp_expr[comp][0])
-#se_expr
-#dico_comp_expr['CPX-1355']    
-#dico_absolute_expr_13w
+temperatures_columns = []
+temperatures_columns.append([1,2,3,"13C in wort","13w"])
+temperatures_columns.append([4,5,6,"22C in wort","22w"])
+temperatures_columns.append([7,8,9,"30C in wort","30w"])
+temperatures_columns.append([10,11,12,"13C in SD media","13aa"])
+temperatures_columns.append([13,14,15,"22C in SD media","22aa"])
+temperatures_columns.append([16,17,18,"30C in SD media","30aa"])
+temperatures_columns.append([19,20,21,"13C in SD media w/o leucine","13leu"])
+temperatures_columns.append([22,23,24,"22C in SD media w/o leucine","22leu"])
+temperatures_columns.append([25,26,27,"30C in SD media w/o leucine","30leu"])
+temperatures_columns.append([28,29,30,"13C in SD media + 6% ethanol","13eth"])
+temperatures_columns.append([31,32,33,"22C in SD media + 6% ethanol","22eth"])
+temperatures_columns.append([34,35,36,"30C in SD media + 6% ethanol","30eth"])
+
+t = 0.2
+for temperature in temperatures_columns:
+    print("\n---- ",temperature[3])
+    i = 0
+    with open("files/normalised_reads.csv","r") as annot:
+        next(annot)
+        for line in annot:
+            line = line.split("\n")[0]
+            line = line.split("\t")
+            sp = line[0].replace("_","")
+            if sp in alleles_comp and sp not in toremove:
+                   mean_expr = (float(line[temperature[0]])+float(line[temperature[1]])+float(line[temperature[2]]))/3
+    #            print(line[0],float(line[temperature[0]]),float(line[temperature[1]]),float(line[temperature[2]]))
+                   if abs(float(line[temperature[0]]) - mean_expr) > (t*mean_expr):
+#                       print("mean:",mean_expr)
+#                       print("reads 0 ",abs(float(line[temperature[0]])))
+#                       print("reads 1 ",abs(float(line[temperature[1]])))
+#                       print("reads 2 ",abs(float(line[temperature[2]])))
+#                       print(t,"* mean:",t*mean_expr)
+#                       print("abs (needs to be > t*mean)",abs(float(line[temperature[0]]) - mean_expr))
+                       i+=1
+#                       break
+    print("Inconsistent:",i)
+    print("Total alleles:",len(alleles_comp))
+    annot.close()
+
+
 #
 #%%              
 # 13w, 22w, 30w, 13aa, 22aa, 30aa, 13leu, 22leu, 30leu, 13eth, 22eth, 30eth 
@@ -91,8 +144,9 @@ temperatures_columns.append([28,29,30,"13C in SD media + 6% ethanol","13eth"])
 temperatures_columns.append([31,32,33,"22C in SD media + 6% ethanol","22eth"])
 temperatures_columns.append([34,35,36,"30C in SD media + 6% ethanol","30eth"])
 
-threshold = 3
-print("######################### THRESHOLD :",threshold)
+threshold = 2
+min_reads = 10
+print("\n######################### THRESHOLD :",threshold," and min reads:",min_reads)
 
 #
 ##%%
@@ -110,13 +164,13 @@ for temperature in temperatures_columns:
     print("####################### ",temperature[3]," #####################################\n")
 #    print(temperature)
     globals()['dico_absolute_expr_'+str(temperature[4])] = {}
-    with open("files/annotated_table_expression_all_conditions.csv","r") as annot:
+    with open("files/normalised_reads.csv","r") as annot:
         next(annot)
         for line in annot:
             line = line.split("\n")[0]
-            line = line.split(",")
+            line = line.split("\t")
             
-            mean_expr = (float(line[temperature[0]])+float(line[temperature[1]])+float(line[temperature[2]]))/3
+            mean_expr = np.median(float(line[temperature[0]])+float(line[temperature[1]])+float(line[temperature[2]]))
 #            print(line[0],float(line[temperature[0]]),float(line[temperature[1]]),float(line[temperature[2]]))
             sp = line[0].replace("_","")
 #            print(mean_expr)
@@ -137,6 +191,7 @@ for temperature in temperatures_columns:
     fr = 0
     chi = 0
     uni = 0
+    inconclusive = 0
     
     homodimers_issue = []
     count_except_homo = 0
@@ -172,14 +227,20 @@ for temperature in temperatures_columns:
                 if comp not in res_homodimers.keys():
                     res_homodimers[comp] = {'genomic': conc}
                 
-                if se_expr >= threshold*float(sc_expr):
+                if se_expr >= threshold*float(sc_expr) and se_expr >= min_reads:
                     comment = "S. eubayanus +++"
                     frTOuni+=1
                     res_homodimers[comp][str(temperature[4])] = 'Unispecific Se'
-                elif float(sc_expr) >= threshold*float(se_expr):
+                elif float(sc_expr) >= threshold*float(se_expr) and sc_expr >= min_reads:
                     comment = "S. cerevisiae +++"
                     res_homodimers[comp][str(temperature[4])] = 'Unispecific Sc'
                     frTOuni+=1
+                    
+                elif sc_expr < min_reads or se_expr < min_reads:
+                    res_homodimers[comp][str(temperature[4])] = 'Inconclusive'
+                    comment = "Inconclusive"
+                    inconclusive+=1
+#                    break
                 else:
                     res_homodimers[comp][str(temperature[4])] = 'Fully redundant'
                     comment = "Both alleles"
@@ -206,11 +267,10 @@ for temperature in temperatures_columns:
     print("FR to UNI: ",frTOuni)
     print("UNI: ",uni)
     print("Total: ",tot)    
-    
+    print("Inconclusives: ",inconclusive)
     print("\n")  
     
-       
-              
+            
     print("CASE HETERODIMER\n")
     frTOfr = 0
     frTOpr = 0
@@ -221,12 +281,13 @@ for temperature in temperatures_columns:
     prTOuni = 0
     cTOc = 0
     uniTOuni =0
-    
+    frInconclusive = 0
+    prInconclusive = 0
     pr = 0
     fr = 0
     chi = 0
     uni = 0    
-    
+    inconclusive = 0
     
     heterodimers_issue = []
     count_except_hetero = 0
@@ -282,17 +343,27 @@ for temperature in temperatures_columns:
                 
                 if comp not in res_heterodimers.keys():
                     res_heterodimers[comp]= {'genomic': conc} 
-                if float(se_expr1) >= threshold*float(sc_expr1):
+                if float(se_expr1) >= threshold*float(sc_expr1) and float(se_expr1) >= min_reads:
                     comment0 = "S. eubayanus +++"
-                elif float(sc_expr1) >= threshold*float(se_expr1):
+                elif float(sc_expr1) >= threshold*float(se_expr1) and float(sc_expr1) >= min_reads:
                     comment0 = "S. cerevisiae +++"
+                elif float(sc_expr1) < min_reads or float(se_expr1) < min_reads:
+                    comment0 = "Inconclusive"
+                    inconclusive+=1
+#                    print("inconclusive!")
+#                    pass
                 else:
                     comment0 = "Both alleles"
                     
-                if float(se_expr2) >= threshold*float(sc_expr2):
+                if float(se_expr2) >= threshold*float(sc_expr2) and float(se_expr2) >= min_reads:
                     comment1 = "S. eubayanus +++"
-                elif float(sc_expr2) >= threshold*float(se_expr2):
-                    comment1 = "S. cerevisiae +++"
+                elif float(sc_expr2) >= threshold*float(se_expr2) and float(sc_expr2) >= min_reads :
+                    comment1 = "S. cerevisiae +++"   
+                elif float(sc_expr2) < min_reads or float(se_expr2) < min_reads:
+                    comment1 = "Inconclusive"
+                    inconclusive+=1
+#                    print("inconclusive!")
+                    pass
                 else:
                     comment1 = "Both alleles"
                     
@@ -326,6 +397,10 @@ for temperature in temperatures_columns:
                 elif comment0 == "Both alleles" and comment1 == "Both alleles":
                     hyp = "Fully redundant"
                     res_heterodimers[comp][str(temperature[4])] =hyp
+                    
+                elif comment0 == "Inconclusive" or comment1 == "Inconclusive":
+                    res_homodimers[comp][str(temperature[4])] = 'Inconclusive'
+                    hyp = "Inconclusive"
                 else:
 #                        print(comment0,comment1)
                     print("ISSUE CASE 1")
@@ -338,19 +413,26 @@ for temperature in temperatures_columns:
                 if comp not in res_heterodimers.keys():
                     res_heterodimers[comp]= {'genomic': conc}                 
                 try:
-                    if float(se_expr1) >= threshold*float(sc_expr1):
+                    if float(se_expr1) >= threshold*float(sc_expr1) and float(se_expr1) >= min_reads:
                         comment0 = "S. eubayanus +++"
-                    elif float(sc_expr1) >= threshold*float(se_expr1):
+                    elif float(sc_expr1) >= threshold*float(se_expr1) and float(sc_expr1) >= min_reads:
                         comment0 = "S. cerevisiae +++"
+                    elif float(sc_expr1) < min_reads or float(se_expr1) < min_reads:
+                        comment0 = "Inconclusive"
+                        inconclusive+=1
+#                        print("inconclusive!")
                     else:
                         comment0 = "Both alleles"
                 except:
                     pass
                 try:
-                    if float(se_expr2) >= threshold*float(sc_expr2):
+                    if float(se_expr2) >= threshold*float(sc_expr2) and float(se_expr2) >= min_reads:
                         comment1 = "S. eubayanus +++"
-                    elif float(sc_expr2) >= threshold*float(se_expr2):
+                    elif float(sc_expr2) >= threshold*float(se_expr2) and float(sc_expr2) >= min_reads:
                         comment1 = "S. cerevisiae +++"
+                    elif float(sc_expr2) < min_reads or float(se_expr2) < min_reads:
+                        comment1 = "Inconclusive"
+                        inconclusive+=1
                     else:
                         comment1 = "Both alleles"                    
                 except:
@@ -367,6 +449,10 @@ for temperature in temperatures_columns:
                     elif comment1 == "Both alleles":
                         hyp = "Partially redundant - one subunit S. eubayanus"
                         res_heterodimers[comp][str(temperature[4])] ="Partially redundant: P1-Se"
+                        
+                    elif comment0 == "Inconclusive" or comment1 == "Inconclusive":
+                        hyp = "Inconclusive"   
+                        res_homodimers[comp][str(temperature[4])] = 'Inconclusive'
                     else:
 #                            print(comment0,comment1)
                         print("ISSUE CASE 2")
@@ -383,6 +469,9 @@ for temperature in temperatures_columns:
                     elif comment1 == "Both alleles":
                         hyp = "Partially redundant - one subunit S. cerevisiae"
                         res_heterodimers[comp][str(temperature[4])] ="Partially redundant: P1-Sc"
+                    elif comment0 == "Inconclusive" or comment1 == "Inconclusive":
+                        hyp = "Inconclusive"  
+                        res_homodimers[comp][str(temperature[4])] = 'Inconclusive'
                     else:
 #                            print(comment0,comment1)
                         print("ISSUE CASE 2 bis")
@@ -399,6 +488,9 @@ for temperature in temperatures_columns:
                     elif comment0 == "Both alleles":
                         hyp = "Partially redundant - one subunit S. eubayanus"
                         res_heterodimers[comp][str(temperature[4])] ="Partially redundant: P2-Se"
+                    elif comment0 == "Inconclusive" or comment1 == "Inconclusive":
+                        hyp = "Inconclusive"  
+                        res_homodimers[comp][str(temperature[4])] = 'Inconclusive'
                     else:
 #                            print(comment0,comment0)
                         print("ISSUE CASE 3")
@@ -415,6 +507,9 @@ for temperature in temperatures_columns:
                     elif comment0 == "Both alleles":
                         hyp = "Partially redundant - one subunit S. cerevisiae"
                         res_heterodimers[comp][str(temperature[4])] ="Partially redundant: P2-Sc"
+                    elif comment0 == "Inconclusive" or comment1 == "Inconclusive":
+                        hyp = "Inconclusive"  
+                        res_homodimers[comp][str(temperature[4])] = 'Inconclusive'
                     else:
 #                            print(comment0,comment0)
                         print("ISSUE CASE 4")
@@ -478,6 +573,11 @@ for temperature in temperatures_columns:
                 cTOc+=1
             elif conc == "Unispecific"  and "Unispecific" in hyp:
                 uniTOuni+=1
+                
+            elif conc == "Fully redundant" and hyp == "Inconclusive":
+                 frInconclusive+=1 
+            elif conc == "Partially redundant" and hyp == "Inconclusive":
+                 prInconclusive+=1 
             else:
                 print("OTHER CASE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1")
                 break
@@ -488,25 +588,27 @@ for temperature in temperatures_columns:
     print("FR to PR: ",frTOpr)
     print("FR to UNI: ",frTOuni)
     print("FR to CHI: ",frTOchi)
+    print("FR inconclusive: ",frInconclusive)
     print("PR: ",pr)
     print("PR to PR: ",prTOpr)
     print("PR to CHI: ",prTOchi)
     print("PR to UNI: ",prTOuni)
+    print("PR inconclusive :",prInconclusive)
     print("CHI: ",chi)
     print("CHI to CHI: ",cTOc)
     print("UNI: ",uni)
     print("UNI to UNI: ",uniTOuni)
     print("Total: ",tot)
     
-    if fr != frTOfr+frTOpr+frTOuni+frTOchi:
+    if fr != frTOfr+frTOpr+frTOuni+frTOchi+frInconclusive:
         print("ERROR COUNT FR")
         break
     
-    if pr != prTOpr+prTOchi+prTOuni:
+    if pr != prTOpr+prTOchi+prTOuni+prInconclusive:
         print("ERROR COUNT PR")
         break        
 
-    
+#    print("Inconclusive:",inconclusive) 
     
 
 
@@ -521,12 +623,15 @@ for temperature in temperatures_columns:
     prTOuni = 0
     cTOc = 0
     uniTOuni =0
+    frInconclusive = 0
+    prInconclusive = 0
     
     pr = 0
     fr = 0
     chi = 0
     uni = 0
-
+    inconclusive = 0
+    
     trimers_issue = []
     count_except_tri = 0
     for comp in dico_comp_expr.keys():
@@ -592,24 +697,33 @@ for temperature in temperatures_columns:
             if se_allele1 != "NA" and sc_allele1 != "NA" and se_allele2 != "NA" and sc_allele2 != "NA" and se_allele3 != "NA" and sc_allele3 != "NA"  :
                 conc = "Fully redundant"
                 fr+=1
-                if float(se_expr1) >= threshold*float(sc_expr1):
+                if float(se_expr1) >= threshold*float(sc_expr1) and float(se_expr1) >= min_reads:
                     comment0 = "S. eubayanus +++"
-                elif float(sc_expr1) >= threshold*float(se_expr1):
+                elif float(sc_expr1) >= threshold*float(se_expr1) and float(sc_expr1) >= min_reads:
                     comment0 = "S. cerevisiae +++"
+                elif float(sc_expr1) < min_reads or float(se_expr1) < min_reads:
+                    comment0 = "Inconclusive"
+                    inconclusive+=1
                 else:
                     comment0 = "Both alleles"
                     
-                if float(se_expr2) >= threshold*float(sc_expr2):
+                if float(se_expr2) >= threshold*float(sc_expr2) and float(se_expr2) >= min_reads:
                     comment1 = "S. eubayanus +++"
-                elif float(sc_expr2) >= threshold*float(se_expr2):
+                elif float(sc_expr2) >= threshold*float(se_expr2) and float(sc_expr2) >= min_reads:
                     comment1 = "S. cerevisiae +++"
+                elif float(sc_expr2) < min_reads or float(se_expr2) < min_reads:
+                    comment1 = "Inconclusive"
+                    inconclusive+=1
                 else:
                     comment1 = "Both alleles"
                     
-                if float(se_expr3) >= threshold*float(sc_expr3):
+                if float(se_expr3) >= threshold*float(sc_expr3) and float(se_expr3) >= min_reads:
                     comment2 = "S. eubayanus +++"
-                elif float(sc_expr3) >= threshold*float(se_expr3):
+                elif float(sc_expr3) >= threshold*float(se_expr3) and float(sc_expr3) >= min_reads:
                     comment2 = "S. cerevisiae +++"
+                elif float(sc_expr3) < min_reads or float(se_expr3) < min_reads:
+                    comment2 = "Inconclusive"
+                    inconclusive+=1
                 else:
                     comment2 = "Both alleles"                        
 
@@ -639,9 +753,13 @@ for temperature in temperatures_columns:
                     
                 elif comment0 == "Both alleles" and comment1 == "Both alleles" and comment2 == "Both alleles":
                     hyp = "Fully redundant"
+                
+                elif comment0 == "Inconclusive" or comment1 == "Inconclusive" or comment2 == "Inconclusive":
+                    hyp = "Inconclusive"
                 else:
 #                        print(comment0,comment1,comment2,hyp)
                     print("ISSUE CASE 1")
+                    break
                     
 
             ################ CHIMERIC      
@@ -720,10 +838,12 @@ for temperature in temperatures_columns:
                 conc = "Partially redundant"
                                   
                 if se_allele1 != "NA" and sc_allele1 != "NA":
-                    if float(se_expr1) >= threshold*float(sc_expr1):
+                    if float(se_expr1) >= threshold*float(sc_expr1) and float(se_expr1) >= min_reads:
                         comment0 = "S. eubayanus +++"
-                    elif float(sc_expr1) >= threshold*float(se_expr1):
+                    elif float(sc_expr1) >= threshold*float(se_expr1) and float(sc_expr1) >= min_reads:
                         comment0 = "S. cerevisiae +++"
+                    elif float(se_expr1) < min_reads or float(sc_expr1) < min_reads:
+                        comment0 = "Inconclusive"
                     else:
                         comment0 = "Both alleles"
                         
@@ -738,10 +858,12 @@ for temperature in temperatures_columns:
                         
 
                 if se_allele2 != "NA" and sc_allele2 != "NA":
-                    if float(se_expr2) >= threshold*float(sc_expr2):
+                    if float(se_expr2) >= threshold*float(sc_expr2) and float(se_expr2) >= min_reads:
                         comment1 = "S. eubayanus +++"
-                    elif float(sc_expr2) >= threshold*float(se_expr2):
+                    elif float(sc_expr2) >= threshold*float(se_expr2) and float(sc_expr2) >= min_reads:
                         comment1 = "S. cerevisiae +++"
+                    elif float(se_expr2) < min_reads or float(sc_expr2) < min_reads:
+                        comment1 = "Inconclusive"
                     else:
                         comment1 = "Both alleles"  
                 elif se_allele2 == "NA" and sc_allele2 != "NA":
@@ -755,10 +877,12 @@ for temperature in temperatures_columns:
                         
 
                 if se_allele3 != "NA" and sc_allele3 != "NA":
-                    if float(se_expr3) >= threshold*float(sc_expr3):
+                    if float(se_expr3) >= threshold*float(sc_expr3) and float(se_expr3) >= min_reads:
                         comment2 = "S. eubayanus +++"
-                    elif float(sc_expr3) >= threshold*float(se_expr3):
+                    elif float(sc_expr3) >= threshold*float(se_expr3) and float(sc_expr3) >= min_reads:
                         comment2 = "S. cerevisiae +++"
+                    elif float(se_expr3) < min_reads or float(sc_expr3) < min_reads:
+                        comment2 = "Inconclusive"
                     else:
                         comment2 = "Both alleles"                    
                 elif se_allele3 == "NA" and sc_allele3 != "NA":
@@ -792,6 +916,8 @@ for temperature in temperatures_columns:
                         hyp = "Partially redundant - two subunits S. eubayanus"                            
                     elif (comment1 == "Both alleles" and comment2 == "Both alleles"):
                         hyp = "Partially redundant - one subunit S. eubayanus - two both"   
+                    elif (comment1 == "Inconclusive" or comment2 == "Inconclusive"):
+                        hyp ="Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 2")
@@ -814,7 +940,9 @@ for temperature in temperatures_columns:
                     elif (comment1 == "S. cerevisiae +++" and comment2 == "Both alleles"):
                         hyp = "Partially redundant - two subunits S. cerevisiae"                            
                     elif (comment1 == "Both alleles" and comment2 == "Both alleles"):
-                        hyp = "Partially redundant - one subunit S. cerevisiae - two both"   
+                        hyp = "Partially redundant - one subunit S. cerevisiae - two both"  
+                    elif (comment1 == "Inconclusive" or comment2 == "Inconclusive"):
+                        hyp ="Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 3")
@@ -838,6 +966,8 @@ for temperature in temperatures_columns:
                         hyp = "Partially redundant - two subunits S. cerevisiae"                            
                     elif (comment1 == "Both alleles" and comment0 == "Both alleles"):
                         hyp = "Partially redundant - one subunit S. cerevisiae - two both"   
+                    elif (comment1 == "Inconclusive" or comment0 == "Inconclusive"):
+                        hyp ="Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 4")
@@ -861,6 +991,8 @@ for temperature in temperatures_columns:
                         hyp = "Partially redundant - two subunits S. eubayanus"                            
                     elif (comment1 == "Both alleles" and comment0 == "Both alleles"):
                         hyp = "Partially redundant - one subunit S. eubayanus - two both"   
+                    elif (comment1 == "Inconclusive" or comment0 == "Inconclusive"):
+                        hyp ="Inconclusive"
                     else:
                         
 #                            print(comment0,comment1,comment2,conc,hyp)
@@ -889,6 +1021,8 @@ for temperature in temperatures_columns:
                         hyp = "Partially redundant - two subunits S. eubayanus"                            
                     elif (comment0 == "Both alleles" and comment2 == "Both alleles"):
                         hyp = "Partially redundant - one subunit S. eubayanus - two both"   
+                    elif (comment0 == "Inconclusive" or comment2 == "Inconclusive"):
+                        hyp ="Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 6")
@@ -912,6 +1046,8 @@ for temperature in temperatures_columns:
                         hyp = "Partially redundant - two subunits S. cerevisiae"                            
                     elif (comment0 == "Both alleles" and comment2 == "Both alleles"):
                         hyp = "Partially redundant - one subunit S. cerevisiae - two both"   
+                    elif (comment0 == "Inconclusive" or comment2 == "Inconclusive"):
+                        hyp ="Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 7")
@@ -929,7 +1065,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment0 == "Both alleles": 
                         hyp = "Partially redundant -two subunits S. eubayanus - one both"
- 
+                    elif comment0 == "Inconclusive":
+                        hyp ="Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 8")
@@ -947,7 +1084,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment0 == "Both alleles": 
                         hyp = "Partially redundant -two subunits S. cerevisiae - one both"
- 
+                    elif comment0 == "Inconclusive":
+                        hyp ="Inconclusive" 
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 9")
@@ -965,7 +1103,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment1 == "Both alleles": 
                         hyp = "Partially redundant -two subunits S. cerevisiae - one both"
- 
+                    elif comment1 == "Inconclusive":
+                        hyp ="Inconclusive" 
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 10")
@@ -983,11 +1122,12 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment1 == "Both alleles": 
                         hyp = "Partially redundant -two subunits S. eubayanus - one both"
- 
+                    elif comment1 == "Inconclusive":
+                        hyp ="Inconclusive"  
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 11")
-#                            break 
+                        break 
                     
 
                     
@@ -1003,7 +1143,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment2 == "Both alleles": 
                         hyp = "Partially redundant -two subunits S. cerevisiae - one both"
- 
+                    elif comment2 == "Inconclusive":
+                        hyp ="Inconclusive"  
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 12")
@@ -1021,7 +1162,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment2 == "Both alleles": 
                         hyp = "Partially redundant -two subunits S. eubayanus - one both"
- 
+                    elif comment2 == "Inconclusive":
+                        hyp ="Inconclusive"   
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 13")
@@ -1037,7 +1179,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment0 == "Both alleles": 
                         hyp = "Partially redundant -one subunit S. eubayanus - one S. cerevisiae - one both"
- 
+                    elif comment0 == "Inconclusive":
+                        hyp = "Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 14")
@@ -1052,7 +1195,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment0 == "Both alleles": 
                         hyp = "Partially redundant -one subunit S. eubayanus - one S. cerevisiae - one both"
- 
+                    elif comment0 == "Inconclusive":
+                        hyp = "Inconclusive"
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 15")
@@ -1067,7 +1211,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment1 == "Both alleles": 
                         hyp = "Partially redundant -one subunit S. eubayanus - one S. cerevisiae - one both"
- 
+                    elif comment1 == "Inconclusive":
+                        hyp = "Inconclusive" 
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 16")
@@ -1082,7 +1227,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment1 == "Both alleles": 
                         hyp = "Partially redundant -one subunit S. eubayanus - one S. cerevisiae - one both"
- 
+                    elif comment1 == "Inconclusive":
+                        hyp = "Inconclusive"  
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 17")
@@ -1097,7 +1243,8 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment2 == "Both alleles": 
                         hyp = "Partially redundant -one subunit S. eubayanus - one S. cerevisiae - one both"
- 
+                    elif comment2 == "Inconclusive":
+                        hyp = "Inconclusive"  
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 18")
@@ -1112,11 +1259,12 @@ for temperature in temperatures_columns:
                         hyp = "Chimeric"
                     elif comment2 == "Both alleles": 
                         hyp = "Partially redundant -one subunit S. eubayanus - one S. cerevisiae - one both"
- 
+                    elif comment2 == "Inconclusive":
+                        hyp = "Inconclusive"   
                     else:
 #                            print(comment0,comment1,comment2)
                         print("ISSUE CASE 19")
-                        break
+#                        break
 
  
 
@@ -1139,6 +1287,10 @@ for temperature in temperatures_columns:
                 cTOc+=1
             elif conc == "Unispecific"  and "Unispecific" in hyp:
                 uniTOuni+=1
+            elif conc == "Fully redundant" and hyp == "Inconclusive":
+                 frInconclusive+=1 
+            elif conc == "Partially redundant" and hyp == "Inconclusive":
+                 prInconclusive+=1 
             else:
                 print("OTHER CASE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1")
                 break
@@ -1149,24 +1301,27 @@ for temperature in temperatures_columns:
     print("FR to PR: ",frTOpr)
     print("FR to UNI: ",frTOuni)
     print("FR to CHI: ",frTOchi)
+    print("FR inconclusive: ",frInconclusive)
     print("PR: ",pr)
     print("PR to PR: ",prTOpr)
     print("PR to CHI: ",prTOchi)
     print("PR to UNI: ",prTOuni)
+    print("PR inconclusive: ",prInconclusive)
     print("CHI: ",chi)
     print("CHI to CHI: ",cTOc)
     print("UNI: ",uni)
     print("UNI to UNI: ",uniTOuni)
     print("Total: ",tot)
-    if fr != frTOfr+frTOpr+frTOuni+frTOchi:
+    
+    if fr != frTOfr+frTOpr+frTOuni+frTOchi+frInconclusive:
         print("ERROR COUNT FR")
         break
     
-    if pr != prTOpr+prTOchi+prTOuni:
+    if pr != prTOpr+prTOchi+prTOuni+prInconclusive:
         print("ERROR COUNT PR")
         break  
     
-    
+#    print("Inconclusive:",inconclusive)
     
 #    break
     
@@ -1175,7 +1330,7 @@ for temperature in temperatures_columns:
 #%%
 res_heterodimers
 
-with open ("results/threshhold_3/Homodimers_behaviour_across_all_conditions.csv","w") as out:
+with open ("results/threshold2_median_meanReads10/Homodimers_behaviour_across_all_conditions.csv","w") as out:
     out.write("Complex\tGenenomic case\t13C in wort\t22C in wort\t30C in wort\t 13C in SD media\t22C in SD media\t30C in SD media\t13C in SD media w/o leucine\t22C in SD media w/o leucine\t30C in SD media w/o leucine\t13C in SD media + 6% ethanol\t22C in SD media + 6% ethanol\t30C in SD media + 6% ethanol\n")
     for comp in res_homodimers:
         out.write(str(comp)+"\t")
@@ -1185,7 +1340,7 @@ with open ("results/threshhold_3/Homodimers_behaviour_across_all_conditions.csv"
         out.write("\n")
         
         
-with open ("results/threshhold_3/Fully_Redundant_heterodimers_behaviour_across_all_conditions.csv","w") as out:
+with open ("results/threshold2_median_meanReads10/Fully_Redundant_heterodimers_behaviour_across_all_conditions.csv","w") as out:
     out.write("Complex\tGenenomic case\t13C in wort\t22C in wort\t30C in wort\t 13C in SD media\t22C in SD media\t30C in SD media\t13C in SD media w/o leucine\t22C in SD media w/o leucine\t30C in SD media w/o leucine\t13C in SD media + 6% ethanol\t22C in SD media + 6% ethanol\t30C in SD media + 6% ethanol\n")
         
     for comp in res_heterodimers:
@@ -1197,7 +1352,7 @@ with open ("results/threshhold_3/Fully_Redundant_heterodimers_behaviour_across_a
             out.write("\n")
 #        break
 
-with open ("results/threshhold_3/Partially_Redundant_heterodimers_behaviour_across_all_conditions.csv","w") as out:
+with open ("results/threshold2_median_meanReads10/Partially_Redundant_heterodimers_behaviour_across_all_conditions.csv","w") as out:
     out.write("Complex\tGenenomic case\t13C in wort\t22C in wort\t30C in wort\t 13C in SD media\t22C in SD media\t30C in SD media\t13C in SD media w/o leucine\t22C in SD media w/o leucine\t30C in SD media w/o leucine\t13C in SD media + 6% ethanol\t22C in SD media + 6% ethanol\t30C in SD media + 6% ethanol\n")
     for comp in res_heterodimers:
         if res_heterodimers[comp]['genomic'] == "Partially redundant":
@@ -1223,3 +1378,61 @@ print(homodimers_issue)
 print(heterodimers_issue)
 
 print(trimers_issue)
+
+
+
+
+#%% complexes that changes expression across conditions
+
+# 13w, 22w, 30w, 13aa, 22aa, 30aa, 13leu, 22leu, 30leu, 13eth, 22eth, 30eth 
+temperatures_columns = []
+temperatures_columns.append([1,2,3,"13C in wort","13w"])
+temperatures_columns.append([4,5,6,"22C in wort","22w"])
+temperatures_columns.append([7,8,9,"30C in wort","30w"])
+temperatures_columns.append([10,11,12,"13C in SD media","13aa"])
+temperatures_columns.append([13,14,15,"22C in SD media","22aa"])
+temperatures_columns.append([16,17,18,"30C in SD media","30aa"])
+temperatures_columns.append([19,20,21,"13C in SD media w/o leucine","13leu"])
+temperatures_columns.append([22,23,24,"22C in SD media w/o leucine","22leu"])
+temperatures_columns.append([25,26,27,"30C in SD media w/o leucine","30leu"])
+temperatures_columns.append([28,29,30,"13C in SD media + 6% ethanol","13eth"])
+temperatures_columns.append([31,32,33,"22C in SD media + 6% ethanol","22eth"])
+temperatures_columns.append([34,35,36,"30C in SD media + 6% ethanol","30eth"])
+
+
+for temperature in temperatures_columns:
+    print("\n\n")
+    print("####################### ",temperature[3]," #####################################\n")
+#    print(temperature)
+    globals()['dico_absolute_expr_'+str(temperature[4])] = {}
+    with open("files/normalised_reads.csv","r") as annot:
+        next(annot)
+        for line in annot:
+            line = line.split("\n")[0]
+            line = line.split("\t")
+            
+            median_expr = np.median(float(line[temperature[0]])+float(line[temperature[1]])+float(line[temperature[2]]))
+#            print(line[0],float(line[temperature[0]]),float(line[temperature[1]]),float(line[temperature[2]]))
+            sp = line[0].replace("_","")
+#            print(mean_expr)
+            globals()['dico_absolute_expr_'+str(temperature[4])][sp] = median_expr          
+    annot.close()
+    
+with open ("results/complexes_changing_expression.csv","r") as file, open("results/complexes_changing_expression_results.csv","w") as out:
+       header = next(file)
+       out.write("\t".join(header.split(",")))
+       for line in file:
+              line = line.split("\n")[0]
+              line = line.split(",")
+              print(line)
+              sp = line[2]
+              if sp == "na":
+                     out.write("\t".join(line)+"\n")
+              else:       
+                     out.write("\t".join(line)+"\t")
+                     out.write(str(dico_absolute_expr_13w[sp])+"\t"+str(dico_absolute_expr_22w[sp])+"\t"+str(dico_absolute_expr_30w[sp])+"\t"+ str(dico_absolute_expr_13aa[sp])+"\t"+str(dico_absolute_expr_22aa[sp])+"\t"+str(dico_absolute_expr_30aa[sp])+"\t"+str(dico_absolute_expr_13leu[sp])+"\t"+str(dico_absolute_expr_22leu[sp])+"\t"+str(dico_absolute_expr_30leu[sp])+"\t"+ str(dico_absolute_expr_13eth[sp])+"\t"+str(dico_absolute_expr_22eth[sp])+"\t"+str(dico_absolute_expr_30eth[sp])+"\n")
+              
+              
+              
+              
+#              break
